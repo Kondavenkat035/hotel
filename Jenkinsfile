@@ -2,18 +2,18 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = 'dockerhub_cred' // Replace with your Jenkins DockerHub credentials ID
-        IMAGE_NAME = 'kondavenkat035/hotel:1998'
+        DOCKER_IMAGE = "kondavenkat035/hotal"
+        TAG = "${BUILD_NUMBER}"
     }
 
     stages {
-        stage('Checkout') {
+
+        stage('Checkout Code') {
             steps {
-               git branch: 'main', url: 'https://github.com/Kondavenkat035/hotel.git'
+                git branch: 'main', url: 'https://github.com/Kondavenkat035/hotel.git'
             }
         }
-
-        stage('Build WAR') {
+        stage('Inntall') {
             steps {
                 sh 'mvn clean package'
             }
@@ -21,35 +21,32 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t ${IMAGE_NAME}:latest ."
+                sh "docker build -t ${DOCKER_IMAGE}:${TAG} ."
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Login to DockerHub') {
             steps {
-               usernamePassword(
-                credentialsId: 'valaxy-docker',
-                usernameVariable: 'DOCKER_USERNAME',
-                passwordVariable: 'DOCKER_PASSWORD'
-                 )
+                withCredentials([usernamePassword(
+                    credentialsId: 'valaxy-docker',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
                     sh '''
-                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                        docker push ${IMAGE_NAME}:latest
-                        docker logout
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                     '''
                 }
             }
         }
 
-        stage('Run Container') {
+        stage('Push Image to DockerHub') {
             steps {
-                sh '''
-                    docker stop restaurant || true
-                    docker rm restaurant || true
-                    docker run -d -p 4444:8080 --name restaurant ${IMAGE_NAME}:latest
-                '''
+                sh """
+                docker push ${DOCKER_IMAGE}:${TAG}
+                docker tag ${DOCKER_IMAGE}:${TAG} ${DOCKER_IMAGE}:latest
+                docker push ${DOCKER_IMAGE}:latest
+                """
             }
         }
     }
 }
-
