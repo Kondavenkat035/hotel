@@ -9,7 +9,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-               git branch: 'main', url: 'https://github.com/sai798187/hotel.git'
+               git branch: 'main', url: 'https://github.com/Kondavenkat035/hotel.git'
             }
         }
 
