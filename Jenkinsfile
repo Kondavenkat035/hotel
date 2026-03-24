@@ -6,29 +6,27 @@ pipeline {
         DOCKER_IMAGE = "kondavenkat035/hotal"
         TAG = "${BUILD_NUMBER}"
         
-        // AWS and Kubernetes Details
+        // AWS and EKS Details
         AWS_REGION = "us-east-1"
+        CLUSTER_NAME = "new-cluster"
         KUBECONFIG = "/var/lib/jenkins/.kube/config"
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                // Pulls your code from the GitHub repository
                 git branch: 'main', url: 'https://github.com/Kondavenkat035/hotel.git'
             }
         }
 
         stage('Maven Build') {
             steps {
-                // Compiles your Java application and skips unit tests for speed
                 sh 'mvn clean package -DskipTests'
             }
         }
 
         stage('Docker Build & Tag') {
             steps {
-                // Builds the Docker image and tags it with the Jenkins Build Number
                 sh """
                 docker build -t ${DOCKER_IMAGE}:${TAG} .
                 docker tag ${DOCKER_IMAGE}:${TAG} ${DOCKER_IMAGE}:latest
@@ -38,7 +36,6 @@ pipeline {
 
         stage('Push to DockerHub') {
             steps {
-                // Uses your 'valaxy-docker' credentials to log in to Docker Hub
                 withCredentials([usernamePassword(
                     credentialsId: 'valaxy-docker',
                     usernameVariable: 'DOCKER_USER',
@@ -53,10 +50,9 @@ pipeline {
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy to EKS') {
             steps {
-                // This 'withCredentials' block provides the "ID Card" (AWS Keys) for EKS
-                // It uses your 'k8s' credential (Username/Password type)
+                // This uses your 'k8s' Username/Password credential for AWS Access
                 withCredentials([usernamePassword(
                     credentialsId: 'k8s', 
                     usernameVariable: 'AWS_ID', 
@@ -64,21 +60,27 @@ pipeline {
                 )]) {
                     script {
                         sh """
-                        # 1. Provide the credentials to the environment for AWS CLI
-                        export AWS_ACCESS_KEY_ID=${AWS_ID}
-                        export AWS_SECRET_ACCESS_KEY=${AWS_SECRET}
+                        # 1. Set AWS credentials for the session
+                        export AWS_ACCESS_KEY_ID='${AWS_ID}'
+                        export AWS_SECRET_ACCESS_KEY='${AWS_SECRET}'
                         export AWS_DEFAULT_REGION=${AWS_REGION}
                         export KUBECONFIG=${KUBECONFIG}
 
-                        # 2. Update the hotel.yml image tag to the current Build Number
-                        # This tells Kubernetes to pull the NEW version of the image
+                        # 2. Update the Kubeconfig for your specific cluster
+                        # This generates the token that fixes the "provide credentials" error
+                        aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME}
+
+                        # 3. Update the image tag in hotel.yml
                         sed -i "s|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${TAG}|g" hotel.yml
 
-                        # 3. Apply the configuration to the EKS Cluster
+                        # 4. Apply the configuration to the cluster
                         kubectl apply -f hotel.yml
                         
-                        # 4. Optional: If you have other files like auto.yml or food.yml, add them here
+                        # 5. Optional: Apply other files if they exist
                         # kubectl apply -f auto.yml
+                        # kubectl apply -f insta.yml
+                        # kubectl apply -f takeit.yml
+                        # kubectl apply -f food.yml
                         """
                     }
                 }
@@ -88,13 +90,13 @@ pipeline {
 
     post {
         success {
-            echo "Successfully deployed Build #${env.BUILD_NUMBER} to Kubernetes!"
+            echo "Successfully deployed Build #${env.BUILD_NUMBER} to ${CLUSTER_NAME}!"
         }
         failure {
-            echo "Deployment Failed. Check the logs for AWS Authentication or K8s connection errors."
+            echo "Deployment Failed. Check the logs for AWS Authentication or Cluster Name errors."
         }
         always {
-            // Removes local images from the Jenkins server to save disk space
+            // Cleanup local Docker images to save disk space
             sh "docker rmi ${DOCKER_IMAGE}:${TAG} ${DOCKER_IMAGE}:latest || true"
         }
     }
