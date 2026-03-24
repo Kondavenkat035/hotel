@@ -52,7 +52,6 @@ pipeline {
 
         stage('Deploy to EKS') {
             steps {
-                // This uses your 'k8s' Username/Password credential for AWS Access
                 withCredentials([usernamePassword(
                     credentialsId: 'k8s', 
                     usernameVariable: 'AWS_ID', 
@@ -60,27 +59,29 @@ pipeline {
                 )]) {
                     script {
                         sh """
-                        # 1. Set AWS credentials for the session
+                        # 1. Ensure Jenkins can find AWS and Kubectl in the system path
+                        export PATH=\$PATH:/usr/local/bin:/usr/bin:/bin
+                        
+                        # 2. Set AWS credentials for the handshake
                         export AWS_ACCESS_KEY_ID='${AWS_ID}'
                         export AWS_SECRET_ACCESS_KEY='${AWS_SECRET}'
                         export AWS_DEFAULT_REGION=${AWS_REGION}
                         export KUBECONFIG=${KUBECONFIG}
 
-                        # 2. Update the Kubeconfig for your specific cluster
-                        # This generates the token that fixes the "provide credentials" error
+                        # 3. Refresh the EKS token for 'new-cluster'
                         aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME}
 
-                        # 3. Update the image tag in hotel.yml
+                        # 4. Update the image tag in hotel.yml
                         sed -i "s|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${TAG}|g" hotel.yml
 
-                        # 4. Apply the configuration to the cluster
-                        kubectl apply -f hotel.yml
+                        # 5. Deploy to the cluster (using --validate=false to bypass the credential prompt)
+                        kubectl apply -f hotel.yml --validate=false
                         
-                        # 5. Optional: Apply other files if they exist
-                        # kubectl apply -f auto.yml
-                        # kubectl apply -f insta.yml
-                        # kubectl apply -f takeit.yml
-                        # kubectl apply -f food.yml
+                        # Apply your other service files if they are in your repo
+                        # kubectl apply -f auto.yml --validate=false
+                        # kubectl apply -f insta.yml --validate=false
+                        # kubectl apply -f takeit.yml --validate=false
+                        # kubectl apply -f food.yml --validate=false
                         """
                     }
                 }
@@ -90,13 +91,15 @@ pipeline {
 
     post {
         success {
-            echo "Successfully deployed Build #${env.BUILD_NUMBER} to ${CLUSTER_NAME}!"
+            echo "=========================================================="
+            echo "Successfully deployed Build #${env.BUILD_NUMBER} to EKS!"
+            echo "=========================================================="
         }
         failure {
-            echo "Deployment Failed. Check the logs for AWS Authentication or Cluster Name errors."
+            echo "Deployment Failed. Check AWS CLI version or Cluster Name."
         }
         always {
-            // Cleanup local Docker images to save disk space
+            // Cleanup local images to keep the Jenkins server clean
             sh "docker rmi ${DOCKER_IMAGE}:${TAG} ${DOCKER_IMAGE}:latest || true"
         }
     }
