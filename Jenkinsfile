@@ -9,7 +9,6 @@ pipeline {
         // AWS and EKS Details
         AWS_REGION = "us-east-1"
         CLUSTER_NAME = "new-cluster"
-        KUBECONFIG = "/var/lib/jenkins/.kube/config"
     }
 
     stages {
@@ -59,28 +58,29 @@ pipeline {
                 )]) {
                     script {
                         sh """
-                        # 1. Ensure Jenkins can find AWS and Kubectl in the system path
-                        export PATH=\$PATH:/usr/local/bin:/usr/bin:/bin
+                        # 1. Force the use of the new AWS CLI Version 2 path
+                        export PATH=/usr/local/bin:/usr/bin:/bin:\$PATH
                         
-                        # 2. Set AWS credentials for the handshake
+                        # 2. Setup AWS Environment Credentials
                         export AWS_ACCESS_KEY_ID='${AWS_ID}'
                         export AWS_SECRET_ACCESS_KEY='${AWS_SECRET}'
                         export AWS_DEFAULT_REGION=${AWS_REGION}
-                        export KUBECONFIG=${KUBECONFIG}
-
-                        # 3. Refresh the EKS token for 'new-cluster'
+                        
+                        # 3. Create a fresh Kubeconfig in the current workspace
+                        # This avoids permission issues with /var/lib/jenkins/.kube/
+                        export KUBECONFIG=\$(pwd)/kubeconfig
+                        
+                        # 4. Refresh connection using AWS CLI v2
                         aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME}
 
-                        # 4. Update the image tag in hotel.yml
+                        # 5. Update image tag in hotel.yml
                         sed -i "s|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${TAG}|g" hotel.yml
 
-                        # 5. Deploy to the cluster (using --validate=false to bypass the credential prompt)
+                        # 6. Deploy (Bypassing validation to prevent OpenAPI credential errors)
                         kubectl apply -f hotel.yml --validate=false
                         
-                        # Apply your other service files if they are in your repo
+                        # Optional: Apply other files if they are in your repository
                         # kubectl apply -f auto.yml --validate=false
-                        # kubectl apply -f insta.yml --validate=false
-                        # kubectl apply -f takeit.yml --validate=false
                         # kubectl apply -f food.yml --validate=false
                         """
                     }
@@ -92,14 +92,14 @@ pipeline {
     post {
         success {
             echo "=========================================================="
-            echo "Successfully deployed Build #${env.BUILD_NUMBER} to EKS!"
+            echo "SUCCESS: Build #${env.BUILD_NUMBER} is live on EKS!"
             echo "=========================================================="
         }
         failure {
-            echo "Deployment Failed. Check AWS CLI version or Cluster Name."
+            echo "FAILURE: Deployment failed. Verify AWS CLI v2 is in /usr/local/bin"
         }
         always {
-            // Cleanup local images to keep the Jenkins server clean
+            // Cleanup local images to save disk space on Jenkins instance
             sh "docker rmi ${DOCKER_IMAGE}:${TAG} ${DOCKER_IMAGE}:latest || true"
         }
     }
