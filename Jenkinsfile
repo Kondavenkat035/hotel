@@ -52,7 +52,7 @@ pipeline {
             steps {
                 sh """
                 export KUBECONFIG=/var/lib/jenkins/.kube/config
-                kubectl apply -f furni.yml
+                kubectl apply -f hotel.yml
                 """
             }
         }
