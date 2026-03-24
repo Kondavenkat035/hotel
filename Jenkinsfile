@@ -48,20 +48,20 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                // We ONLY ask Jenkins for the 'k8s' secret
-                withCredentials([
-                    string(credentialsId: 'k8s', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
+                // FIXED: This matches your 'Username with password' credential named 'k8s'
+                withCredentials([usernamePassword(
+                    credentialsId: 'k8s', 
+                    usernameVariable: 'MY_AWS_ID', 
+                    passwordVariable: 'MY_AWS_SECRET'
+                )]) {
                     script {
                         sh """
-                        # PASTE YOUR ACTUAL ACCESS KEY ID HERE (The one starting with AKIA)
-                        export AWS_ACCESS_KEY_ID="AKIAxxxxxxxxxxxxxxxx" 
-                        
-                        # This comes from your 'k8s' Jenkins credential
-                        export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+                        # We map the credentials to the standard AWS variables
+                        export AWS_ACCESS_KEY_ID=${MY_AWS_ID}
+                        export AWS_SECRET_ACCESS_KEY=${MY_AWS_SECRET}
                         export AWS_DEFAULT_REGION=${AWS_REGION}
 
-                        # Update hotel.yml with new tag
+                        # Update the hotel.yml image tag to the current Build Number
                         sed -i "s|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${TAG}|g" hotel.yml
 
                         # Apply to EKS
@@ -75,7 +75,7 @@ pipeline {
 
     post {
         success { echo "Deployment Successful!" }
-        failure { echo "Deployment Failed. Check AWS Access ID or k8s Secret." }
+        failure { echo "Deployment Failed. Check logs above." }
         always {
             sh "docker rmi ${DOCKER_IMAGE}:${TAG} ${DOCKER_IMAGE}:latest || true"
         }
