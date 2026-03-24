@@ -54,8 +54,8 @@ pipeline {
             steps {
                 // This block injects your AWS "ID Card" so kubectl can talk to EKS
                 withCredentials([
-                    string(credentialsId: 'k8s', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'AWS_SECRET_KEY', variable: 'AWS_SECRET_ACCESS_KEY')
+                    string(credentialsId: 'AWS_ACCESS_KEY', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'k8s', variable: 'AWS_SECRET_ACCESS_KEY')
                 ]) {
                     script {
                         sh """
