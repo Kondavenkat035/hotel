@@ -2,10 +2,13 @@ pipeline {
     agent any
 
     environment {
+        // Docker Details
         DOCKER_IMAGE = "kondavenkat035/hotal"
         TAG = "${BUILD_NUMBER}"
-        // Set KUBECONFIG globally so every 'sh' step sees it
-        KUBECONFIG = "/var/lib/jenkins/.kube/config" 
+        
+        // AWS Details (Change region if yours is different)
+        AWS_REGION = "us-east-1"
+        KUBECONFIG = "/var/lib/jenkins/.kube/config"
     }
 
     stages {
@@ -15,14 +18,14 @@ pipeline {
             }
         }
 
-        stage('Install') { // Fixed typo "Inntall"
+        stage('Maven Build') {
             steps {
-                // Ensure Maven is installed on your Jenkins agent
-                sh 'mvn clean package'
+                // Compiles your Java code and creates the JAR file
+                sh 'mvn clean package -DskipTests'
             }
         }
 
-        stage('Build & Tag Docker Image') {
+        stage('Docker Build & Tag') {
             steps {
                 sh """
                 docker build -t ${DOCKER_IMAGE}:${TAG} .
@@ -47,27 +50,46 @@ pipeline {
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy to Kubernetes (EKS)') {
             steps {
-                script {
-                    // Update the YAML file with the new image tag before applying
-                    // This ensures K8s actually pulls the NEW version
-                    sh "sed -i 's|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${TAG}|g' hotel.yml"
-                    
-                    sh "kubectl apply -f hotel.yml"
-                    
-                    // Verify the rollout
-                    sh "kubectl rollout status deployment/your-deployment-name"
+                // This block injects your AWS "ID Card" so kubectl can talk to EKS
+                withCredentials([
+                    string(credentialsId: 'k8s', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'AWS_SECRET_KEY', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
+                    script {
+                        sh """
+                        # 1. Set AWS Credentials in the environment
+                        export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+                        export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+                        export AWS_DEFAULT_REGION=${AWS_REGION}
+
+                        # 2. Update the hotel.yml with the new image tag (Build Number)
+                        # This ensures K8s pulls the NEW image, not the old 'latest'
+                        sed -i 's|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${TAG}|g' hotel.yml
+
+                        # 3. Apply the changes to the cluster
+                        kubectl apply -f hotel.yml
+                        
+                        # 4. Optional: Verify the deployment status
+                        # Replace 'hotel-deployment' with the actual name in your hotel.yml
+                        # kubectl rollout status deployment/hotel-deployment
+                        """
+                    }
                 }
             }
         }
     }
 
     post {
-        success { echo "Deployment Successful" }
-        failure { echo "Deployment Failed" }
+        success {
+            echo "Successfully deployed Build #${env.BUILD_NUMBER} to EKS!"
+        }
+        failure {
+            echo "Deployment failed. Check the logs above for AWS or K8s errors."
+        }
         always {
-            // Clean up to save disk space
+            // Clean up Docker images on the Jenkins server to save disk space
             sh "docker rmi ${DOCKER_IMAGE}:${TAG} ${DOCKER_IMAGE}:latest || true"
         }
     }
