@@ -48,5 +48,23 @@ pipeline {
                 """
             }
         }
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh """
+                export KUBECONFIG=/var/lib/jenkins/.kube/config
+                kubectl apply -f furni.yml
+                """
+            }
+        }
     }
+
+       post {
+          success {
+            echo "Deployment Successful "
+          }
+         failure {
+            echo "Deployment Failed "
+         }
+      }
+   }
 }
