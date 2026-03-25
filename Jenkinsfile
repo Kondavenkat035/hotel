@@ -7,13 +7,13 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/Kondavenkat035/hotel.git'
             }
         }
-        stage('Inntall') {
+
+        stage('Install') {
             steps {
                 sh 'mvn clean package'
             }
@@ -32,9 +32,7 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh '''
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    '''
+                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
                 }
             }
         }
@@ -48,6 +46,7 @@ pipeline {
                 """
             }
         }
+
         stage('Deploy to Kubernetes') {
             steps {
                 sh """
@@ -56,39 +55,32 @@ pipeline {
                 """
             }
         }
+
+        stage('Show App URL') {
+            steps {
+                sh '''
+                export KUBECONFIG=/var/lib/jenkins/.kube/config
+                URL=$(kubectl get ingress k8s-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+                echo "======================================"
+                echo "Application deployed successfully"
+                echo ""
+                echo "Food:   http://$URL/food"
+                echo "Travel: http://$URL/travel"
+                echo "DevOps: http://$URL/devops"
+                echo ""
+                echo "======================================"
+                '''
+            }
+        }
     }
 
-       post {
-          success {
-            echo "Deployment Successful "
-          }
-         failure {
-            echo "Deployment Failed "
-         }
-      }
- }
- stage('Show App URL') {
-            steps {
-        sh '''
-            export KUBECONFIG=/var/lib/jenkins/.kube/config
-
-            URL=$(kubectl get ingress k8s-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-
-            echo "======================================"
-            echo "Application deployed successfully"
-            echo ""
-            echo "Food:   http://$URL/food"
-            echo "Travel: http://$URL/travel"
-            echo "DevOps: http://$URL/devops"
-            
-            echo ""
-            echo "======================================"
-        '''
-            }
-       }
+    post {
+        success {
+            echo "Deployment Successful"
+        }
+        failure {
+            echo "Deployment Failed"
+        }
     }
 }
-
-     
-
-
