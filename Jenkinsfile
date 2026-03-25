@@ -61,22 +61,17 @@ pipeline {
                 sh '''
                 export KUBECONFIG=/var/lib/jenkins/.kube/config
                 
-                # Try to get the Hostname (AWS/Azure)
                 URL=$(kubectl get svc hotel-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
                 
-                # If Hostname is empty, try to get the IP (GCP/Bare Metal)
                 if [ -z "$URL" ]; then
                     URL=$(kubectl get svc hotel-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
                 fi
 
-                # Display the URL or a helpful message if still pending
                 echo "===================================================="
                 if [ -z "$URL" ]; then
-                    echo "STATUS: Deployment complete, but LoadBalancer is still provisioning."
-                    echo "Run 'kubectl get svc hotel-service' in a few moments to get the IP."
+                    echo "STATUS: LoadBalancer is still provisioning."
                 else
-                    echo "Application is LIVE at the following links:"
-                    echo "hotel:   http://$URL/hotel"
+                    echo "Application URL: http://$URL/hotel"
                 fi
                 echo "===================================================="
                 '''
@@ -87,9 +82,36 @@ pipeline {
     post {
         success {
             echo "Deployment Successful!"
+
+            emailext (
+                subject: "✅ SUCCESS: Jenkins Build #${BUILD_NUMBER}",
+                body: """
+                <h3>Pipeline Execution Successful</h3>
+                <p><b>Job:</b> ${JOB_NAME}</p>
+                <p><b>Build Number:</b> ${BUILD_NUMBER}</p>
+                <p>Status: SUCCESS ✅</p>
+                <p>Check Jenkins for details.</p>
+                """,
+                to: "kondavenkat035@gmail.com",
+                from: "kondavenkat035@gmail.com"
+            )
         }
+
         failure {
             echo "Deployment Failed. Check the logs above for errors."
+
+            emailext (
+                subject: "❌ FAILED: Jenkins Build #${BUILD_NUMBER}",
+                body: """
+                <h3>Pipeline Execution Failed</h3>
+                <p><b>Job:</b> ${JOB_NAME}</p>
+                <p><b>Build Number:</b> ${BUILD_NUMBER}</p>
+                <p>Status: FAILURE ❌</p>
+                <p>Please check Jenkins logs.</p>
+                """,
+                to: "kondavenkat035@gmail.com",
+                from: "kondavenkat035@gmail.com"
+            )
         }
     }
 }
