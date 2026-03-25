@@ -76,9 +76,7 @@ pipeline {
                     echo "Run 'kubectl get svc hotel-service' in a few moments to get the IP."
                 else
                     echo "Application is LIVE at the following links:"
-                    echo "Food:   http://$URL/food"
-                    echo "Travel: http://$URL/travel"
-                    echo "DevOps: http://$URL/devops"
+                    echo "hotel:   http://$URL/hotel"
                 fi
                 echo "===================================================="
                 '''
