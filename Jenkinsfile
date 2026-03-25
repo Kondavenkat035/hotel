@@ -61,35 +61,37 @@ pipeline {
                 sh '''
                 export KUBECONFIG=/var/lib/jenkins/.kube/config
                 
-                # 1. Automatically find the Ingress name using labels
-                INGRESS_NAME=$(kubectl get ingress -l app=hotel -o jsonpath='{.items[0].metadata.name}')
-
-                if [ -z "$INGRESS_NAME" ]; then
-                    echo "Error: No Ingress found with label app=hotel"
-                    exit 1
-                fi
-
-                # 2. Get the Hostname or IP from that specific Ingress
-                URL=$(kubectl get ingress $INGRESS_NAME -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                # Try to get the Hostname (AWS/Azure)
+                URL=$(kubectl get svc hotel-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
                 
-                # Fallback to IP if hostname is empty
+                # If Hostname is empty, try to get the IP (GCP/Bare Metal)
                 if [ -z "$URL" ]; then
-                    URL=$(kubectl get ingress $INGRESS_NAME -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                    URL=$(kubectl get svc hotel-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
                 fi
 
-                echo "======================================"
-                echo "Detected Ingress: $INGRESS_NAME"
-                echo "Application URL:  http://$URL"
-                echo "======================================"
+                # Display the URL or a helpful message if still pending
+                echo "===================================================="
+                if [ -z "$URL" ]; then
+                    echo "STATUS: Deployment complete, but LoadBalancer is still provisioning."
+                    echo "Run 'kubectl get svc hotel-service' in a few moments to get the IP."
+                else
+                    echo "Application is LIVE at the following links:"
+                    echo "Food:   http://$URL/food"
+                    echo "Travel: http://$URL/travel"
+                    echo "DevOps: http://$URL/devops"
+                fi
+                echo "===================================================="
                 '''
             }
         }
+    }
+
     post {
         success {
-            echo "Deployment Successful"
+            echo "Deployment Successful!"
         }
         failure {
-            echo "Deployment Failed"
+            echo "Deployment Failed. Check the logs above for errors."
         }
     }
 }
