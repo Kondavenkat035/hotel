@@ -61,6 +61,9 @@ pipeline {
                 sh '''
                 export KUBECONFIG=/var/lib/jenkins/.kube/config
                 URL=$(kubectl get ingress k8s-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                if [ -z "$URL" ]; then
+                    URL=$(kubectl get svc hotel-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                fi
 
                 echo "======================================"
                 echo "Application deployed successfully"
