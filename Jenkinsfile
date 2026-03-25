@@ -60,24 +60,30 @@ pipeline {
             steps {
                 sh '''
                 export KUBECONFIG=/var/lib/jenkins/.kube/config
-                URL=$(kubectl get ingress k8s-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                
+                # 1. Automatically find the Ingress name using labels
+                INGRESS_NAME=$(kubectl get ingress -l app=hotel -o jsonpath='{.items[0].metadata.name}')
+
+                if [ -z "$INGRESS_NAME" ]; then
+                    echo "Error: No Ingress found with label app=hotel"
+                    exit 1
+                fi
+
+                # 2. Get the Hostname or IP from that specific Ingress
+                URL=$(kubectl get ingress $INGRESS_NAME -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                
+                # Fallback to IP if hostname is empty
                 if [ -z "$URL" ]; then
-                    URL=$(kubectl get svc hotel-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                    URL=$(kubectl get ingress $INGRESS_NAME -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
                 fi
 
                 echo "======================================"
-                echo "Application deployed successfully"
-                echo ""
-                echo "Food:   http://$URL/food"
-                echo "Travel: http://$URL/travel"
-                echo "DevOps: http://$URL/devops"
-                echo ""
+                echo "Detected Ingress: $INGRESS_NAME"
+                echo "Application URL:  http://$URL"
                 echo "======================================"
                 '''
             }
         }
-    }
-
     post {
         success {
             echo "Deployment Successful"
